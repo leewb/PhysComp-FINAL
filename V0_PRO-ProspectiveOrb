@@ -1,0 +1,262 @@
+/*
+ * Classroom of The Future: Prospective Orb (Arduino + Processing)
+ * Lee Saynor
+ * DIGF 2B03 Physical Computing
+ * OCAD University
+ * Created April 3, 2014
+ * 
+ *   V0 - Deprecated Java fixed, XML parser rewritten with assistance from Daniel Tabak
+ *        ttslib ditched for because it interrupts draw (threading doesn't fix); GoogleTTS works
+ *        timed text replaces scrolling and is synced to TTS .mp3 file duration
+ * 
+ * Seer types query, as long as ball is held program will reveal Suggestions.
+ *
+ * Based on:
+ * "Codebox: Amuse yourself with Google Autocomplete," MAKE by Andrew Odewahn
+ * http://makezine.com/2010/11/01/codebox-amuse-yourself-with-google/
+ * "Text-to-speech" by Amnon P5
+ * http://amnonp5.wordpress.com/2011/11/26/text-to-speech/
+ *
+ */
+
+
+
+import controlP5.*;  
+import java.net.*;
+//import java.net.URLEncoder;       //Used to encode query strings
+import java.io.*;
+
+ControlP5 controlP5;              //ControlP5 object
+Textfield userQuery;
+Button findButton;
+
+import ddf.minim.*;
+AudioPlayer player;
+Minim minim;
+AudioMetaData meta;
+
+Timer timer;
+
+ArrayList suggestionList;         //Running list of suggestions
+
+int oldTime = 0; 
+int timeBetweenFetches = 10000;   //Fetch a new batch of suggestions every 10 second (used to be 5)
+int alphaIdx = 0;
+boolean readImmediate = false;    //A flag we can set to bypass the timer and read the suggestions immeditely
+
+
+int y;                            //Current y position of the top most piece of text
+int fontSize = 48;                //Size of the words
+int buffer = 5;                   //Number of pixels between text
+int dy = 1;                       //Number of pixels moved each frame
+
+
+String baseURL = "http://google.com/complete/search?output=toolbar&q=";
+String alphabet = "abcdedfhijklmnopqrstuvwxyz";
+
+int romeo = 0;
+
+PFont gost;
+boolean exist = false;
+String babar;
+
+    
+// Set up the key variables
+void setup() {  
+   frameRate(45);
+   textFont (createFont("", fontSize), fontSize);
+   size(1200, 450, P3D);
+   //Set up user interface
+   controlP5 = new ControlP5(this);
+   controlP5.addTextfield("userQuery", 50, 60, 100,20);
+   controlP5.addButton("findButton", 1, 160, 60, 50,20);
+   //Set up data set to hold queries
+   suggestionList = new ArrayList();
+   // Set up timing for query
+   oldTime = millis();
+   readImmediate = true;
+   // Set text position
+   y = height;
+   
+   gost = loadFont("GOST_CommonItalic-48.vlw");
+   
+   minim = new Minim(this);
+   
+   timer = new Timer(2500);      // 2s for each mp3 to play
+   timer.start();
+}
+
+
+//Encodes a parameter to use in a query string
+String encode (String name, String value) throws UnsupportedEncodingException  {
+  String retVal = "";
+
+      retVal = name + "=" + URLEncoder.encode(value, "UTF-8"); 
+
+    return retVal;
+}     
+
+
+// Seems like there is some undocumented changes happeneing w/in XMLElement in processing
+// This post in the forums helped clarify what was up
+// http://forum.processing.org/topic/xmlelement-problem-function-getint-getstring-does-not-exist
+
+// Modified getSuggestions function for new processing XML parser
+void getSuggestions(String theURL) {
+  String[] results = loadStrings(theURL);
+  String suggestions = join(results,"\n");
+  XML xml = parseXML(suggestions);
+  XML[] children = xml.getChildren("CompleteSuggestion");
+  for (int i = 0; i < children.length; i++) {
+     String s = children[i].getChild("suggestion").getString("data");
+     //System.out.println(s);    // googleTTS will print
+     suggestionList.add(s);      // Add the suggestion to our data set
+     googleTTS(s, "en");         // Create a googleTTS .mp3 file 
+  }
+}
+
+  
+// PRESS P5 BUTTON (Resets query values passed to google)
+public void findButton(int theValue) {
+   alphaIdx = 0;                 //Reset us back to the beginning of the alphabet
+   romeo = 0;
+   timer.start();
+   suggestionList.clear();       //Clear the current list of suggestions
+   oldTime = millis();           //Reset the current time
+   readImmediate = true;         //Set the flag to bypass the time
+   y = height;                   //Reset the location of the y position of the text
+}
+
+void draw(){
+  background(0);
+  //background(map(mouseX, 0, width, 0, 255), 0, 0);
+  controlP5.draw();  //This is necessary when you're using 3D mode
+  //Read a new set of suggestions every few seconds, as specified in timeBetweenFetches
+  if (alphaIdx < alphabet.length()) {
+     int passedTime = millis() - oldTime;
+     if ( (passedTime > timeBetweenFetches) || readImmediate ) {  
+        String uq = ((Textfield)controlP5.controller("userQuery")).getText();   
+        
+        String theQuery = URLEncoder.encode(uq + " " + alphabet.charAt(alphaIdx));
+        
+        getSuggestions(baseURL + theQuery);
+        alphaIdx += 1;
+        oldTime = millis();
+        readImmediate = false;
+     }
+  }
+
+  //Now draw the scolling text
+  /*fill(255,255,25);
+  pushMatrix();
+  // Idea to rotate the text comes from Luis Gonzalez's "Star Wars" sketch on openprocesing.org
+  // http://www.openprocessing.org/visuals/?visualID=4167
+  //rotateX(PI/3.75);
+  y -= dy;  //set the scroll variable
+  for (int i=0; i < suggestionList.size(); i++) {
+    String s = (String) suggestionList.get(i);
+    int tx = (int) (width - textWidth(s))/2; //Centers the text on the x-axis
+    int ty = y + i * (fontSize + buffer);  //Computes the y position
+    text(s,tx,ty, -width/2);
+  }
+  popMatrix();*/
+
+  
+  if (timer.isFinished()) {
+    exist = true;
+    babar = (String) suggestionList.get(romeo);
+    println("TIME! Play " + babar + ".mp3");
+    if (player != null) { player.close(); } // comment this line to layer sounds
+    player = minim.loadFile(babar + ".mp3", 2048);
+    meta = player.getMetaData();
+    timer.totalTime = (meta.length() + 400);
+    player.play();
+    timer.start();
+    romeo += 1;
+  }
+  
+  if (exist == true) {                // Only draws if there is a String in "babar"
+    fill(255);
+    textAlign(CENTER);
+    textFont(gost);
+    text(babar, width/2, height/2);
+  } else {                            // Otherwise draw "..."
+    fill(255);
+    textAlign(CENTER);
+    textFont(gost);
+    text("...", width/2, height/2);
+  }
+}
+
+
+void googleTTS(String txt, String language) {
+  String u = "http://translate.google.com/translate_tts?tl=";
+  u = u + language + "&q=" + txt;
+  u = u.replace(" ", "%20");
+  try {
+    URL url = new URL(u);
+    try {
+      URLConnection connection = url.openConnection();
+      connection.setRequestProperty("User-Agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; .NET CLR 1.0.3705; .NET CLR 1.1.4322; .NET CLR 1.2.30703)");
+      connection.connect();
+      InputStream is = connection.getInputStream();
+      File f = new File(sketchPath + "/" + txt + ".mp3");
+      OutputStream out = new FileOutputStream(f);
+      byte buf[] = new byte[1024];
+      int len;
+      while ((len = is.read(buf)) > 0) {
+        out.write(buf, 0, len);
+      }
+      out.close();
+      is.close();
+      println("File created: " + txt + ".mp3");
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  } catch (MalformedURLException e) {
+    e.printStackTrace();
+  }
+}
+ 
+void stop() {
+  player.close();
+  minim.stop();
+  super.stop();
+}
+
+
+
+
+// Learning Processing
+// Daniel Shiffman
+// http://www.learningprocessing.com
+
+// Example 10-5: Object-oriented timer
+
+class Timer {
+ 
+  int savedTime; // When Timer started
+  int totalTime; // How long Timer should last
+  
+  Timer(int tempTotalTime) {
+    totalTime = tempTotalTime;
+  }
+  
+  // Starting the timer
+  void start() {
+    // When the timer starts it stores the current time in milliseconds.
+    savedTime = millis(); 
+  }
+  
+  // The function isFinished() returns true if 5,000 ms have passed. 
+  // The work of the timer is farmed out to this method.
+  boolean isFinished() { 
+    // Check how much time has passed
+    int passedTime = millis()- savedTime;
+    if (passedTime > totalTime) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
