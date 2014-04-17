@@ -1,0 +1,141 @@
+/*
+ * Classroom of The Future: Prospective Orb (Arduino + Processing)
+ * Lee Saynor
+ * DIGF 2B03 Physical Computing
+ * OCAD University
+ * Created April 3, 2014; Updated April 16, 2014
+ *   
+ *   See Processing sketch for changelog.
+ * 
+ * Seer types query, as long as ball is held program will reveal Suggestions.
+ *
+ * Based on my LAB 5 Change Visuals sketch and:
+ * "Codebox: Amuse yourself with Google Autocomplete," MAKE by Andrew Odewahn
+ * http://makezine.com/2010/11/01/codebox-amuse-yourself-with-google/
+ * "Text-to-speech" by Amnon P5
+ * http://amnonp5.wordpress.com/2011/11/26/text-to-speech/
+ * Connecting Arduino to Processing ...to Arduino, Sparkfun
+ * https://learn.sparkfun.com/tutorials/connecting-arduino-to-processing/to-arduino
+ * Crossfade RGB LEDs, Learning Arduino by Clay Shirky
+ * http://www.arduino.cc/en/Tutorial/DimmingLEDs
+ *
+ *
+ */
+
+
+// OUTPUT
+const int redPin   = 3;     // Red LED,   connected to digital pin 3
+const int greenPin = 5;     // Green LED, connected to digital pin 5
+const int bluePin  = 6;     // Blue LED,  connected to digital pin 6
+
+int redVal   = 1;           // Variables to store the values to send to the pins
+int greenVal = 1;           // Initial values are Red full, Green and Blue off
+int blueVal  = 1;
+
+int frame = 0;              // Loop counter    
+int phase = 0;              // Which LED transition?
+boolean goingUp = false;
+int wait = 35;              // 50ms (.05 second) delay; shorten for faster fades
+
+// INPUT
+const int sensorPin = 0;    // LDR sensor pin
+const int dummyPin = 1;     // 2nd LDR
+
+char inByte = 0;            // incoming serial byte   //int
+//char val;                 // $TEST$ Data received from the serial port
+
+
+void setup() {
+  Serial.begin(9600);
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for Leonardo only
+  }
+
+  pinMode(redPin,   OUTPUT);   // sets the pins as output
+  pinMode(greenPin, OUTPUT);   
+  pinMode(bluePin,  OUTPUT);
+  
+  establishContact();  // send a byte to establish contact until receiver responds
+}
+
+
+void loop() {
+  if (greenVal > 240 && phase == 1) {
+    goingUp = false;
+  }
+  
+  if (greenVal < 150 && phase == 1) {
+    goingUp = true;
+  }
+  
+  frame += 1;                      // Increment counter
+    
+  if (phase == 0) {                // FADE IN TO GREEN
+    if (frame < 255) {
+      redVal    = 1;               // Red null
+      greenVal += 1;               // Green up
+      blueVal  += 1;               // Blue up
+    } else {
+      phase++;
+    }
+  } else if (phase == 1) {         // GREEN PULSING <---------not working
+      redVal      = 1;             // Red ON
+      greenVal    = 255;           // Green ON
+      blueVal     = 200;           // Blue null
+    /*if (goingUp == false) {
+      redVal    = 1;               // Red null
+      greenVal -= 6;               // Green down
+      blueVal  -= 6;               // Blue down
+    } else if (goingUp == true) {
+      redVal    = 1;               // Red null
+      greenVal += 3;               // Green up
+      blueVal  += 3;               // Blue up
+    }*/
+  } else if (phase == 2) {         // GOLD PULSING
+    redVal      = 255;             // Red ON
+    greenVal    = 213;             // Green ON
+    blueVal     = 0;             // Blue null
+  } else if (phase == 3) {         // END/OFF
+    redVal      = 1;               // Red null
+    greenVal    = 1;               // Green null
+    blueVal     = 1;               // Blue null
+  }  
+  
+  analogWrite(redPin,   redVal);   // Write current values to LED pins
+  analogWrite(greenPin, greenVal); 
+  analogWrite(bluePin,  blueVal);  
+  
+  
+  // If we get a valid byte from Processing, read analog in:
+  if (Serial.available() > 0) {
+    // Get incoming byte:
+    inByte = Serial.read();
+    // Read analog input:
+    int val = analogRead(sensorPin);
+    int dummy = analogRead(dummyPin);
+    
+    Serial.print(val);
+    Serial.print(",");
+    Serial.println(dummy);
+  }
+ 
+ 
+  // Problematic because it's rapidly switching between them
+  if (inByte == '1') {
+    phase = 1;
+  } else if (inByte == '2') {
+    phase = 2;
+  } else {
+    phase = 3;  // <--- this is not turning off the LED upon Processing disconnect
+                //    ...nor did putting it as an "else" statement RE: if (Serial.available() > 0)
+  }
+  delay(wait);
+}
+
+
+void establishContact() {
+  while (Serial.available() <= 0) {
+    Serial.println("0,0");      // Send an initial string
+    delay(100);
+  }
+}
